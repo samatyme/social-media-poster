@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\CalendarController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\MediaController;
+use App\Http\Controllers\Api\PlatformCredentialController;
 use App\Http\Controllers\Api\PostController;
 use App\Http\Controllers\Api\SettingsController;
 use App\Http\Controllers\Api\SocialAccountController;
@@ -57,6 +58,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('settings/profile',                  [SettingsController::class, 'updateProfile']);
     Route::put('settings/organization',             [SettingsController::class, 'updateOrganization']);
     Route::put('settings/feature-flags',            [SettingsController::class, 'updateFeatureFlags']);
+
+    // Platform credentials (per-org API keys)
+    Route::get('platform-credentials',                      [PlatformCredentialController::class, 'index']);
+    Route::put('platform-credentials/{platform}',           [PlatformCredentialController::class, 'upsert']);
+    Route::delete('platform-credentials/{platform}',        [PlatformCredentialController::class, 'destroy']);
 
     // Platform rules (public to authenticated users)
     Route::get('platform-rules', fn() => response()->json(config('platform_rules')));

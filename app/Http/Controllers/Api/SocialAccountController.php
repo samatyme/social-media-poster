@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\SocialAccount;
 use App\Publishers\MockPublisher;
+use App\Publishers\PublisherFactory;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -38,10 +39,12 @@ class SocialAccountController extends Controller
             'account_handle' => 'nullable|string|max:255',
         ]);
 
+        $orgId = $request->user()->organization_id;
+
         if (env('PUBLISHER_MODE', 'mock') === 'mock') {
             $publisher = new MockPublisher();
             $account   = $publisher->connectAccount([
-                'organization_id' => $request->user()->organization_id,
+                'organization_id' => $orgId,
                 'platform'        => $request->platform,
                 'account_name'    => $request->account_name,
                 'account_handle'  => $request->account_handle,
@@ -49,8 +52,17 @@ class SocialAccountController extends Controller
             return response()->json($account, 201);
         }
 
-        // TODO: Initiate real OAuth flow, return redirect URL
-        return response()->json(['redirect_url' => '/oauth/' . $request->platform . '/start']);
+        // Verify org has credentials configured for this platform
+        try {
+            PublisherFactory::make($request->platform, $orgId);
+        } catch (\RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        // Real OAuth: return the redirect URL for the frontend to navigate to
+        return response()->json([
+            'redirect_url' => url("/api/oauth/{$request->platform}/redirect?org={$orgId}"),
+        ]);
     }
 
     public function destroy(Request $request, SocialAccount $socialAccount): JsonResponse
