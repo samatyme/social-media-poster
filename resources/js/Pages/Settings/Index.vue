@@ -181,7 +181,7 @@ const page  = usePage()
 
 const settings           = ref(null)
 const saving             = ref(false)
-const authUser           = computed(() => page.props.auth.user)
+const authUser           = computed(() => settings.value?.user ?? page.props.auth.user)
 const canManage          = computed(() => ['owner', 'admin'].includes(authUser.value?.role))
 
 const profileForm = ref({ name: '', timezone: 'UTC' })
