@@ -308,6 +308,7 @@ const { getPlatformLabel } = usePlatform()
 
 const isEditing       = computed(() => !!props.postId)
 const saving          = ref(false)
+const postStatus      = ref('draft')
 const loadingAccounts = ref(false)
 const dragging        = ref(false)
 const hashtagInput    = ref('')
@@ -351,6 +352,7 @@ onMounted(async () => {
 
   if (isEditing.value) {
     const post = await get(`posts/${props.postId}`)
+    postStatus.value        = post.status
     form.value.title        = post.title
     form.value.base_content = post.base_content
     form.value.timezone     = post.timezone
@@ -498,7 +500,7 @@ async function publishNow() {
     if (!isEditing.value) {
       const post = await apiPost('posts', payload)
       postId = post.id
-    } else {
+    } else if (['draft', 'approved'].includes(postStatus.value)) {
       await put(`posts/${postId}`, payload)
     }
     await apiPost(`posts/${postId}/publish-now`)
@@ -519,7 +521,7 @@ async function schedulePost({ scheduled_at, timezone }) {
     if (!isEditing.value) {
       const post = await apiPost('posts', payload)
       postId = post.id
-    } else {
+    } else if (['draft', 'approved'].includes(postStatus.value)) {
       await put(`posts/${postId}`, payload)
     }
     await apiPost(`posts/${postId}/schedule`, { scheduled_at, timezone })
