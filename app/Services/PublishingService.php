@@ -29,7 +29,8 @@ class PublishingService
 
         try {
             $account   = $variant->socialAccount;
-            $publisher = PublisherFactory::make($variant->platform);
+            $orgId     = $variant->post->organization_id;
+            $publisher = PublisherFactory::make($variant->platform, $orgId);
             $result    = $publisher->publishPost($variant);
 
             if ($result['success']) {
