@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Start-Process \"c:\\\\xampp\\\\xampp-control.exe\" -ErrorAction SilentlyContinue)",
+      "PowerShell(Test-NetConnection -ComputerName 127.0.0.1 -Port 8080 -InformationLevel Quiet 2>$null)",
+      "PowerShell($login = Invoke-RestMethod -Uri \"http://127.0.0.1:8080/api/auth/login\" -Method Post -ContentType \"application/json\" -Body '{\"email\":\"admin@demo.com\",\"password\":\"password\"}'; $token = $login.token; Write-Host \"Token: $\\($token.Substring\\(0,20\\)\\)...\"; $dashboard = Invoke-RestMethod -Uri \"http://127.0.0.1:8080/api/dashboard\" -Method Get -Headers @{Authorization=\"Bearer $token\"}; $dashboard.stats | ConvertTo-Json)",
+      "PowerShell($response = Invoke-WebRequest -Uri \"http://127.0.0.1:8080/api/auth/login\" -Method Post -ContentType \"application/json\" -Body '{\"email\":\"admin@demo.com\",\"password\":\"password\"}' -ErrorAction SilentlyContinue; Write-Host \"Status: $\\($response.StatusCode\\)\"; $response.Content | Select-Object -First 500)"
+    ]
+  }
+}
