@@ -108,9 +108,12 @@ const userInitials = computed(() => {
   return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
 })
 
-function logout() {
-  router.post('/api/auth/logout', {}, {
-    onSuccess: () => router.visit('/login')
-  })
+async function logout() {
+  try {
+    await window.axios.post('/api/auth/logout')
+  } catch {}
+  localStorage.removeItem('auth_token')
+  delete window.axios.defaults.headers.common['Authorization']
+  window.location.href = '/login'
 }
 </script>

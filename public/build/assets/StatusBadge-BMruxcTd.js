@@ -1,1 +1,0 @@
-import{u as e}from"./PlatformIcon-DelD7XbR.js";import{f as n,v as c,n as r,c as l,q as p}from"./app-BXh2FjdH.js";const _={__name:"StatusBadge",props:{status:String},setup(t){const a=t,{getStatusConfig:o}=e(),s=l(()=>o(a.status));return(u,m)=>(p(),n("span",{class:r(s.value.class)},c(s.value.label),3))}};export{_};
