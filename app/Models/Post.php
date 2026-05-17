@@ -91,6 +91,9 @@ class Post extends Model
 
     public function canBePublished(): bool
     {
-        return $this->canBeScheduled() || $this->status === 'scheduled';
+        return $this->canBeScheduled()
+            || $this->status === 'scheduled'
+            || $this->status === 'failed'
+            || $this->status === 'publishing'; // retry stuck posts
     }
 }
