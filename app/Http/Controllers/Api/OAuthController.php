@@ -2,13 +2,12 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Models\Organization;
 use App\Models\SocialAccount;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Http;
 
-class OAuthController extends Controller
+class OAuthController extends \App\Http\Controllers\Controller
 {
     // -------------------------------------------------------------------------
     // Entry point: redirect the browser to the platform's OAuth consent screen
@@ -120,7 +119,7 @@ class OAuthController extends Controller
         $expiresIn  = $longRes['expires_in'] ?? (60 * 24 * 3600);
 
         if ($instagram) {
-            return $this->connectInstagramAccount($orgId, $longToken, $expiresIn, $creds);
+            return $this->connectInstagramAccount($orgId, $longToken, $expiresIn);
         }
 
         return $this->connectFacebookPage($orgId, $longToken, $expiresIn);
@@ -159,7 +158,7 @@ class OAuthController extends Controller
         );
     }
 
-    private function connectInstagramAccount(int $orgId, string $userToken, int $expiresIn, array $creds): SocialAccount
+    private function connectInstagramAccount(int $orgId, string $userToken, int $expiresIn): SocialAccount
     {
         // Get pages first, then find linked Instagram business account
         $pagesRes = Http::get('https://graph.facebook.com/v19.0/me/accounts', [
