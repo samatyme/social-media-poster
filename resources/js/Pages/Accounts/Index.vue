@@ -137,7 +137,11 @@ const platforms = [
 ]
 
 async function fetchAccounts() {
-  accounts.value = await get('social-accounts')
+  try {
+    accounts.value = await get('social-accounts')
+  } catch (err) {
+    toast.error('Failed to load accounts.')
+  }
 }
 
 onMounted(fetchAccounts)
@@ -145,11 +149,19 @@ onMounted(fetchAccounts)
 async function connectAccount() {
   connecting.value = true
   try {
-    await apiPost('social-accounts/connect', connectForm.value)
+    const res = await apiPost('social-accounts/connect', connectForm.value)
+
+    // Live mode: backend returns an OAuth redirect URL instead of creating an account directly
+    if (res?.redirect_url) {
+      window.location.href = res.redirect_url
+      return
+    }
+
+    // Mock mode: account created immediately
     toast.success('Account connected!')
     showConnectModal.value = false
     connectForm.value = { platform: '', account_name: '', account_handle: '' }
-    fetchAccounts()
+    await fetchAccounts()
   } catch (err) {
     toast.error(err.response?.data?.message || 'Failed to connect account.')
   } finally {
