@@ -263,7 +263,7 @@ class PostService
     {
         $errors = [];
         foreach ($post->variants()->with('socialAccount', 'post.postMedia.asset')->get() as $variant) {
-            $publisher  = PublisherFactory::make($variant->platform);
+            $publisher  = PublisherFactory::make($variant->platform, $post->organization_id);
             $validation = $publisher->validatePost($variant);
 
             $variant->update([

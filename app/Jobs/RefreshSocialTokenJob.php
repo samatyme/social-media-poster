@@ -24,7 +24,7 @@ class RefreshSocialTokenJob implements ShouldQueue
         if (!$this->account->isTokenExpired()) return;
 
         try {
-            $publisher = PublisherFactory::make($this->account->platform);
+            $publisher = PublisherFactory::make($this->account->platform, $this->account->organization_id);
             $publisher->refreshToken($this->account);
 
             Log::info("Refreshed token for social account #{$this->account->id}");
