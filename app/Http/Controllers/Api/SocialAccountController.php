@@ -35,11 +35,36 @@ class SocialAccountController extends Controller
     {
         $request->validate([
             'platform'       => 'required|in:facebook,instagram,tiktok,x,linkedin',
-            'account_name'   => 'required|string|max:255',
+            'method'         => 'nullable|in:oauth,manual',
+            'account_name'   => 'required_if:method,manual|nullable|string|max:255',
             'account_handle' => 'nullable|string|max:255',
+            'access_token'   => 'required_if:method,manual|nullable|string',
+            'external_id'    => 'nullable|string|max:255',
         ]);
 
         $orgId = $request->user()->organization_id;
+
+        // Manual token entry — store the provided token directly
+        if ($request->method === 'manual') {
+            $account = SocialAccount::updateOrCreate(
+                [
+                    'organization_id'    => $orgId,
+                    'platform'           => $request->platform,
+                    'external_account_id'=> $request->external_id ?: ('manual_' . uniqid()),
+                ],
+                [
+                    'account_name'     => $request->account_name,
+                    'account_handle'   => $request->account_handle ?? '',
+                    'access_token'     => $request->access_token,
+                    'refresh_token'    => null,
+                    'token_expires_at' => null,
+                    'status'           => 'active',
+                    'last_verified_at' => now(),
+                    'deleted_at'       => null,
+                ]
+            );
+            return response()->json($account, 201);
+        }
 
         if (env('PUBLISHER_MODE', 'mock') === 'mock') {
             $publisher = new MockPublisher();

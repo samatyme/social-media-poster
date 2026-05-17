@@ -71,6 +71,21 @@
           <button @click="showConnectModal = false" class="btn-ghost btn-sm"><X class="w-4 h-4" /></button>
         </div>
         <div class="px-6 py-5 space-y-4">
+          <!-- Connection method toggle -->
+          <div class="flex rounded-lg border border-gray-200 p-1 gap-1">
+            <button
+              @click="connectMethod = 'oauth'"
+              :class="['flex-1 text-sm py-1.5 rounded-md font-medium transition-colors',
+                       connectMethod === 'oauth' ? 'bg-blue-600 text-white' : 'text-gray-600 hover:text-gray-900']"
+            >OAuth (Redirect)</button>
+            <button
+              @click="connectMethod = 'manual'"
+              :class="['flex-1 text-sm py-1.5 rounded-md font-medium transition-colors',
+                       connectMethod === 'manual' ? 'bg-blue-600 text-white' : 'text-gray-600 hover:text-gray-900']"
+            >Manual Token</button>
+          </div>
+
+          <!-- Platform selector -->
           <div>
             <label class="label">Platform</label>
             <div class="grid grid-cols-5 gap-2">
@@ -85,23 +100,48 @@
               </button>
             </div>
           </div>
-          <div>
-            <label class="label">Account Name</label>
-            <input v-model="connectForm.account_name" type="text" class="input" placeholder="My Facebook Page" />
-          </div>
-          <div>
-            <label class="label">Handle / Username</label>
-            <input v-model="connectForm.account_handle" type="text" class="input" placeholder="@mypage" />
-          </div>
-          <div class="rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 text-sm text-blue-700">
-            <strong>Note:</strong> In mock mode, accounts are connected instantly. In production, this will redirect you through OAuth.
-          </div>
+
+          <!-- OAuth mode -->
+          <template v-if="connectMethod === 'oauth'">
+            <div class="rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 text-sm text-blue-700">
+              You will be redirected to the platform to authorize access.
+            </div>
+          </template>
+
+          <!-- Manual token mode -->
+          <template v-else>
+            <div>
+              <label class="label">Account Name</label>
+              <input v-model="connectForm.account_name" type="text" class="input" placeholder="My Facebook Page" />
+            </div>
+            <div>
+              <label class="label">Handle / Username</label>
+              <input v-model="connectForm.account_handle" type="text" class="input" placeholder="@mypage" />
+            </div>
+            <div>
+              <label class="label">Page / Account ID</label>
+              <input v-model="connectForm.external_id" type="text" class="input font-mono text-sm" placeholder="123456789" />
+            </div>
+            <div>
+              <label class="label">Access Token</label>
+              <textarea v-model="connectForm.access_token" class="input font-mono text-xs" rows="3" placeholder="Paste your Page Access Token from Graph API Explorer" />
+            </div>
+            <div class="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-xs text-amber-700 space-y-1">
+              <p class="font-semibold">How to get a Page Access Token:</p>
+              <ol class="list-decimal ml-4 space-y-0.5">
+                <li>Go to <strong>developers.facebook.com/tools/explorer</strong></li>
+                <li>Select your app and click <strong>Generate Access Token</strong></li>
+                <li>Grant page permissions, then select your Page from the dropdown</li>
+                <li>Copy the token and paste it above</li>
+              </ol>
+            </div>
+          </template>
         </div>
         <div class="px-6 py-4 border-t flex gap-3 justify-end">
           <button @click="showConnectModal = false" class="btn-secondary">Cancel</button>
-          <button @click="connectAccount" :disabled="!connectForm.platform || !connectForm.account_name || connecting" class="btn-primary">
+          <button @click="connectAccount" :disabled="!canConnect || connecting" class="btn-primary">
             <LoadingSpinner v-if="connecting" size="sm" />
-            {{ connecting ? 'Connecting…' : 'Connect' }}
+            {{ connecting ? 'Connecting…' : connectMethod === 'oauth' ? 'Continue to OAuth →' : 'Connect' }}
           </button>
         </div>
       </div>
@@ -110,7 +150,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { Plus, RefreshCw, Unlink, X } from 'lucide-vue-next'
 import { format } from 'date-fns'
 import AppLayout from '@/Layouts/AppLayout.vue'
@@ -126,7 +166,16 @@ const toast = useToast()
 const accounts          = ref([])
 const showConnectModal  = ref(false)
 const connecting        = ref(false)
-const connectForm       = ref({ platform: '', account_name: '', account_handle: '' })
+const connectMethod     = ref('oauth')
+const connectForm       = ref({ platform: '', account_name: '', account_handle: '', external_id: '', access_token: '' })
+
+const canConnect = computed(() => {
+  if (!connectForm.value.platform) return false
+  if (connectMethod.value === 'manual') {
+    return connectForm.value.account_name && connectForm.value.access_token
+  }
+  return true
+})
 
 const platforms = [
   { value: 'facebook',  label: 'FB' },
@@ -159,18 +208,19 @@ onMounted(() => {
 async function connectAccount() {
   connecting.value = true
   try {
-    const res = await apiPost('social-accounts/connect', connectForm.value)
+    const payload = { ...connectForm.value, method: connectMethod.value }
+    const res = await apiPost('social-accounts/connect', payload)
 
-    // Live mode: backend returns an OAuth redirect URL instead of creating an account directly
+    // Live OAuth mode: redirect to platform consent screen
     if (res?.redirect_url) {
       window.location.href = res.redirect_url
       return
     }
 
-    // Mock mode: account created immediately
     toast.success('Account connected!')
     showConnectModal.value = false
-    connectForm.value = { platform: '', account_name: '', account_handle: '' }
+    connectForm.value = { platform: '', account_name: '', account_handle: '', external_id: '', access_token: '' }
+    connectMethod.value = 'oauth'
     await fetchAccounts()
   } catch (err) {
     toast.error(err.response?.data?.message || 'Failed to connect account.')
