@@ -80,8 +80,8 @@ class OAuthController extends \App\Http\Controllers\Controller
     private function facebookAuthUrl(array $creds, string $state, bool $instagram = false): string
     {
         $scopes = $instagram
-            ? 'instagram_basic,instagram_content_publish,pages_show_list,pages_read_engagement'
-            : 'pages_manage_posts,pages_read_engagement,pages_show_list,public_profile';
+            ? 'instagram_basic,pages_show_list'
+            : 'public_profile,pages_show_list';
 
         return 'https://www.facebook.com/v19.0/dialog/oauth?' . http_build_query([
             'client_id'     => $creds['app_id'],
