@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\CalendarController;
+use App\Http\Controllers\Api\OAuthController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\MediaController;
 use App\Http\Controllers\Api\PlatformCredentialController;
@@ -10,6 +11,10 @@ use App\Http\Controllers\Api\SocialAccountController;
 use App\Http\Controllers\Api\TeamController;
 use App\Http\Controllers\Auth\AuthController;
 use Illuminate\Support\Facades\Route;
+
+// OAuth callbacks (no auth middleware — browser redirects from social platforms)
+Route::get('oauth/{platform}/redirect',  [OAuthController::class, 'redirect']);
+Route::get('oauth/{platform}/callback',  [OAuthController::class, 'callback']);
 
 // Public auth routes
 Route::prefix('auth')->group(function () {

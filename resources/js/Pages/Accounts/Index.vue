@@ -144,7 +144,17 @@ async function fetchAccounts() {
   }
 }
 
-onMounted(fetchAccounts)
+onMounted(() => {
+  // Handle return from OAuth redirect
+  const params = new URLSearchParams(window.location.search)
+  if (params.has('connected')) toast.success('Account connected successfully!')
+  if (params.has('error'))     toast.error('Connection failed: ' + params.get('error'))
+  // Clean up query string without reloading
+  if (params.has('connected') || params.has('error')) {
+    window.history.replaceState({}, '', window.location.pathname)
+  }
+  fetchAccounts()
+})
 
 async function connectAccount() {
   connecting.value = true
