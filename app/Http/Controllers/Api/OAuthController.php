@@ -136,10 +136,14 @@ class OAuthController extends \App\Http\Controllers\Controller
         $pages = $pagesRes['data'] ?? [];
 
         if (empty($pages)) {
-            throw new \RuntimeException('No Facebook Pages found. Make sure your Facebook account manages at least one Page.');
+            throw new \RuntimeException(
+                'No Facebook Pages found on this account. ' .
+                'You must create a Facebook Page first at facebook.com/pages/create, ' .
+                'then reconnect. (Facebook does not allow posting to personal profiles via API.)'
+            );
         }
 
-        // Use the first page (future enhancement: let user pick)
+        // Use the first page (future: let user pick from list)
         $page = $pages[0];
 
         return SocialAccount::updateOrCreate(
