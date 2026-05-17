@@ -136,28 +136,32 @@ class OAuthController extends \App\Http\Controllers\Controller
         $pages = $pagesRes['data'] ?? [];
 
         if (empty($pages)) {
+            // Include raw response to help debug what Facebook actually returned
+            $raw = json_encode($pagesRes);
             throw new \RuntimeException(
-                'No Facebook Pages found on this account. ' .
-                'You must create a Facebook Page first at facebook.com/pages/create, ' .
-                'then reconnect. (Facebook does not allow posting to personal profiles via API.)'
+                'No Facebook Pages returned by the API. ' .
+                'Make sure you selected your page in the OAuth dialog and granted access. ' .
+                'API response: ' . $raw
             );
         }
 
-        // Use the first page (future: let user pick from list)
-        $page = $pages[0];
+        // Find a page that has an access_token (requires pages_manage_posts).
+        // Fall back to the user token if page tokens aren't included yet.
+        $page      = $pages[0];
+        $pageToken = $page['access_token'] ?? $userToken;
 
         return SocialAccount::updateOrCreate(
             ['organization_id' => $orgId, 'platform' => 'facebook', 'external_account_id' => $page['id']],
             [
-                'account_name'    => $page['name'],
-                'account_handle'  => '@' . strtolower(str_replace(' ', '', $page['name'])),
-                'access_token'    => $page['access_token'], // page token (never expires)
-                'refresh_token'   => $userToken,
-                'token_expires_at'=> now()->addSeconds($expiresIn),
-                'status'          => 'active',
-                'avatar_url'      => $page['picture']['data']['url'] ?? null,
-                'last_verified_at'=> now(),
-                'deleted_at'      => null,
+                'account_name'     => $page['name'],
+                'account_handle'   => '@' . strtolower(str_replace(' ', '', $page['name'])),
+                'access_token'     => $pageToken,
+                'refresh_token'    => $userToken,
+                'token_expires_at' => now()->addSeconds($expiresIn),
+                'status'           => 'active',
+                'avatar_url'       => $page['picture']['data']['url'] ?? null,
+                'last_verified_at' => now(),
+                'deleted_at'       => null,
             ]
         );
     }
