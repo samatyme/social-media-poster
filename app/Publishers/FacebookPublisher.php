@@ -71,7 +71,7 @@ class FacebookPublisher extends BasePublisher
 
     private function publishTextPost(string $pageId, string $token, string $content): string
     {
-        $res = Http::post(self::GRAPH . "/{$pageId}/feed", [
+        $res = Http::asForm()->post(self::GRAPH . "/{$pageId}/feed", [
             'message'      => $content,
             'access_token' => $token,
         ])->throw()->json();
@@ -104,7 +104,7 @@ class FacebookPublisher extends BasePublisher
 
     private function publishSingleImage(string $pageId, string $token, string $content, $asset): string
     {
-        $res = Http::post(self::GRAPH . "/{$pageId}/photos", [
+        $res = Http::asForm()->post(self::GRAPH . "/{$pageId}/photos", [
             'url'          => $this->assetUrl($asset),
             'caption'      => $content,
             'access_token' => $token,
@@ -117,18 +117,18 @@ class FacebookPublisher extends BasePublisher
     {
         // Upload each photo as unpublished, then attach to a single post
         $photoIds = $images->map(function ($asset) use ($pageId, $token) {
-            $res = Http::post(self::GRAPH . "/{$pageId}/photos", [
+            $res = Http::asForm()->post(self::GRAPH . "/{$pageId}/photos", [
                 'url'          => $this->assetUrl($asset),
-                'published'    => false,
+                'published'    => 'false',
                 'access_token' => $token,
             ])->throw()->json();
             return ['media_fbid' => $res['id']];
         })->values()->all();
 
-        $res = Http::post(self::GRAPH . "/{$pageId}/feed", [
-            'message'      => $content,
+        $res = Http::asForm()->post(self::GRAPH . "/{$pageId}/feed", [
+            'message'        => $content,
             'attached_media' => json_encode($photoIds),
-            'access_token' => $token,
+            'access_token'   => $token,
         ])->throw()->json();
 
         return $res['id'];
@@ -136,7 +136,7 @@ class FacebookPublisher extends BasePublisher
 
     private function publishVideo(string $pageId, string $token, string $content, $asset): string
     {
-        $res = Http::post(self::GRAPH . "/{$pageId}/videos", [
+        $res = Http::asForm()->post(self::GRAPH . "/{$pageId}/videos", [
             'file_url'     => $this->assetUrl($asset),
             'description'  => $content,
             'access_token' => $token,
