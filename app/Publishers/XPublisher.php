@@ -33,6 +33,10 @@ class XPublisher extends BasePublisher
         $account = $variant->socialAccount;
         $content = $variant->getEffectiveContent();
 
+        if (!$account) {
+            return $this->buildErrorResponse('Social account not found for this variant.', false);
+        }
+
         try {
             $mediaAssets = $variant->post->postMedia()
                 ->with('asset')
