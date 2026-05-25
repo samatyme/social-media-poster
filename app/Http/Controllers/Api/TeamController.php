@@ -4,9 +4,12 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Notifications\TeamInvitationNotification;
+use Illuminate\Auth\Passwords\PasswordBroker;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
 
 class TeamController extends Controller
@@ -45,7 +48,15 @@ class TeamController extends Controller
             'password'        => Hash::make(Str::random(16)), // temp password
         ]);
 
-        // TODO: Send invitation email with password reset link
+        // Generate a password reset token and send invitation email
+        $token    = Password::broker()->createToken($member);
+        $resetUrl = config('app.url') . '/reset-password?token=' . $token . '&email=' . urlencode($member->email);
+
+        $member->notify(new TeamInvitationNotification(
+            inviterName: $request->user()->name,
+            orgName:     $request->user()->organization->name,
+            resetUrl:    $resetUrl,
+        ));
 
         return response()->json($member, 201);
     }
