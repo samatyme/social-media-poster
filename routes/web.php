@@ -4,8 +4,9 @@ use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
 // Auth pages
-Route::get('/login',    fn() => Inertia::render('Auth/Login'))->name('login');
-Route::get('/register', fn() => Inertia::render('Auth/Register'))->name('register');
+Route::get('/login',          fn() => Inertia::render('Auth/Login'))->name('login');
+Route::get('/register',       fn() => Inertia::render('Auth/Register'))->name('register');
+Route::get('/reset-password', fn() => Inertia::render('Auth/ResetPassword'))->name('password.reset');
 
 // Protected app pages (auth handled on frontend; API uses Sanctum)
 Route::get('/dashboard',           fn() => Inertia::render('Dashboard/Index'))->name('dashboard');
