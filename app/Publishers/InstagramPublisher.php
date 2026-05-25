@@ -11,7 +11,7 @@ class InstagramPublisher extends BasePublisher
 {
     protected string $platform = 'instagram';
 
-    private const GRAPH = 'https://graph.facebook.com/v19.0';
+    private const GRAPH = 'https://graph.instagram.com/v19.0';
 
     public function __construct(private array $credentials = []) {}
 

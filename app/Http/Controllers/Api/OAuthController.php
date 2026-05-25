@@ -25,7 +25,7 @@ class OAuthController extends \App\Http\Controllers\Controller
 
         $url = match ($platform) {
             'facebook'  => $this->facebookAuthUrl($creds, $state),
-            'instagram' => $this->facebookAuthUrl($creds, $state, instagram: true),
+            'instagram' => $this->instagramAuthUrl($creds, $state),
             'x'         => $this->xAuthUrl($creds, $state),
             'linkedin'  => $this->linkedinAuthUrl($creds, $state),
             'tiktok'    => $this->tiktokAuthUrl($creds, $state),
@@ -59,7 +59,7 @@ class OAuthController extends \App\Http\Controllers\Controller
 
             $account = match ($platform) {
                 'facebook'  => $this->handleFacebookCallback($request, $orgId, $creds),
-                'instagram' => $this->handleFacebookCallback($request, $orgId, $creds, instagram: true),
+                'instagram' => $this->handleInstagramCallback($request, $orgId, $creds),
                 'x'         => $this->handleXCallback($request, $orgId, $creds),
                 'linkedin'  => $this->handleLinkedinCallback($request, $orgId, $creds),
                 'tiktok'    => $this->handleTiktokCallback($request, $orgId, $creds),
@@ -166,40 +166,65 @@ class OAuthController extends \App\Http\Controllers\Controller
         );
     }
 
-    private function connectInstagramAccount(int $orgId, string $userToken, int $expiresIn): SocialAccount
+    // =========================================================================
+    // INSTAGRAM (native Instagram Login — no Facebook Page required)
+    // =========================================================================
+
+    private function instagramAuthUrl(array $creds, string $state): string
     {
-        // Get pages first, then find linked Instagram business account
-        $pagesRes = Http::get('https://graph.facebook.com/v19.0/me/accounts', [
-            'access_token' => $userToken,
-            'fields'       => 'id,name,access_token,instagram_business_account',
+        return 'https://api.instagram.com/oauth/authorize?' . http_build_query([
+            'client_id'     => $creds['app_id'],
+            'redirect_uri'  => $this->callbackUrl('instagram'),
+            'scope'         => 'instagram_business_basic,instagram_business_content_publish',
+            'response_type' => 'code',
+            'state'         => $state,
+        ]);
+    }
+
+    private function handleInstagramCallback(Request $request, int $orgId, array $creds): SocialAccount
+    {
+        // Step 1: exchange code for short-lived token
+        $tokenRes = Http::asForm()->post('https://api.instagram.com/oauth/access_token', [
+            'client_id'     => $creds['app_id'],
+            'client_secret' => $creds['app_secret'],
+            'grant_type'    => 'authorization_code',
+            'redirect_uri'  => $this->callbackUrl('instagram'),
+            'code'          => $request->query('code'),
         ])->throw()->json();
 
-        foreach ($pagesRes['data'] ?? [] as $page) {
-            if (!isset($page['instagram_business_account'])) continue;
+        $shortToken = $tokenRes['access_token'];
+        $igUserId   = (string) $tokenRes['user_id'];
 
-            $igId  = $page['instagram_business_account']['id'];
-            $igRes = Http::get("https://graph.facebook.com/v19.0/{$igId}", [
-                'access_token' => $page['access_token'],
-                'fields'       => 'id,name,username,profile_picture_url',
-            ])->throw()->json();
+        // Step 2: exchange for long-lived token (60 days)
+        $longRes = Http::get('https://graph.instagram.com/access_token', [
+            'grant_type'        => 'ig_exchange_token',
+            'client_secret'     => $creds['app_secret'],
+            'access_token'      => $shortToken,
+        ])->throw()->json();
 
-            return SocialAccount::updateOrCreate(
-                ['organization_id' => $orgId, 'platform' => 'instagram', 'external_account_id' => $igId],
-                [
-                    'account_name'     => $igRes['name'] ?? $igRes['username'],
-                    'account_handle'   => '@' . ($igRes['username'] ?? ''),
-                    'access_token'     => $page['access_token'],
-                    'refresh_token'    => $userToken,
-                    'token_expires_at' => now()->addSeconds($expiresIn),
-                    'status'           => 'active',
-                    'avatar_url'       => $igRes['profile_picture_url'] ?? null,
-                    'last_verified_at' => now(),
-                    'deleted_at'       => null,
-                ]
-            );
-        }
+        $longToken = $longRes['access_token'];
+        $expiresIn = $longRes['expires_in'] ?? (60 * 24 * 3600);
 
-        throw new \RuntimeException('No Instagram Business Account found linked to your Facebook Pages.');
+        // Step 3: fetch profile info
+        $profileRes = Http::get("https://graph.instagram.com/v19.0/{$igUserId}", [
+            'fields'       => 'id,name,username,profile_picture_url,account_type',
+            'access_token' => $longToken,
+        ])->throw()->json();
+
+        return SocialAccount::updateOrCreate(
+            ['organization_id' => $orgId, 'platform' => 'instagram', 'external_account_id' => $igUserId],
+            [
+                'account_name'     => $profileRes['name'] ?? $profileRes['username'] ?? '@' . $igUserId,
+                'account_handle'   => '@' . ($profileRes['username'] ?? $igUserId),
+                'access_token'     => $longToken,
+                'refresh_token'    => null,
+                'token_expires_at' => now()->addSeconds($expiresIn),
+                'status'           => 'active',
+                'avatar_url'       => $profileRes['profile_picture_url'] ?? null,
+                'last_verified_at' => now(),
+                'deleted_at'       => null,
+            ]
+        );
     }
 
     // =========================================================================
