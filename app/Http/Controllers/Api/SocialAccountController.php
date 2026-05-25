@@ -34,12 +34,13 @@ class SocialAccountController extends Controller
     public function connect(Request $request): JsonResponse
     {
         $request->validate([
-            'platform'       => 'required|in:facebook,instagram,tiktok,x,linkedin',
-            'method'         => 'nullable|in:oauth,manual',
-            'account_name'   => 'required_if:method,manual|nullable|string|max:255',
-            'account_handle' => 'nullable|string|max:255',
-            'access_token'   => 'required_if:method,manual|nullable|string',
-            'external_id'    => 'nullable|string|max:255',
+            'platform'            => 'required|in:facebook,instagram,tiktok,x,linkedin',
+            'method'              => 'nullable|in:oauth,manual',
+            'account_name'        => 'required_if:method,manual|nullable|string|max:255',
+            'account_handle'      => 'nullable|string|max:255',
+            'access_token'        => 'required_if:method,manual|nullable|string',
+            'access_token_secret' => 'nullable|string',
+            'external_id'         => 'nullable|string|max:255',
         ]);
 
         $orgId = $request->user()->organization_id;
@@ -56,7 +57,7 @@ class SocialAccountController extends Controller
                     'account_name'     => $request->account_name,
                     'account_handle'   => $request->account_handle ?? '',
                     'access_token'     => $request->access_token,
-                    'refresh_token'    => null,
+                    'refresh_token'    => $request->access_token_secret ?? null,
                     'token_expires_at' => null,
                     'status'           => 'active',
                     'last_verified_at' => now(),

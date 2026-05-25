@@ -11,7 +11,7 @@ class XPublisher extends BasePublisher
 {
     protected string $platform = 'x';
 
-    private const API = 'https://api.twitter.com/2';
+    private const API        = 'https://api.twitter.com/2';
     private const UPLOAD_API = 'https://upload.twitter.com/1.1';
 
     public function __construct(private array $credentials = []) {}
@@ -23,40 +23,14 @@ class XPublisher extends BasePublisher
 
     public function refreshToken(SocialAccount $account): SocialAccount
     {
-        if (!$account->refresh_token) {
-            $account->update(['status' => 'expired']);
-            throw new \RuntimeException('No refresh token available for X account.');
-        }
-
-        try {
-            $res = Http::withBasicAuth(
-                $this->credentials['api_key'],
-                $this->credentials['api_secret']
-            )->asForm()->post(self::API . '/oauth2/token', [
-                'grant_type'    => 'refresh_token',
-                'refresh_token' => $account->refresh_token,
-            ])->throw()->json();
-
-            $account->update([
-                'access_token'     => $res['access_token'],
-                'refresh_token'    => $res['refresh_token'] ?? $account->refresh_token,
-                'token_expires_at' => isset($res['expires_in']) ? now()->addSeconds($res['expires_in']) : null,
-                'status'           => 'active',
-                'last_verified_at' => now(),
-            ]);
-
-            return $account->fresh();
-
-        } catch (\Throwable $e) {
-            $account->update(['status' => 'expired']);
-            throw $e;
-        }
+        // OAuth 1.0a tokens don't expire
+        $account->update(['status' => 'active', 'last_verified_at' => now()]);
+        return $account->fresh();
     }
 
     public function publishPost(PostVariant $variant): array
     {
         $account = $variant->socialAccount;
-        $token   = $account->access_token;
         $content = $variant->getEffectiveContent();
 
         try {
@@ -69,7 +43,7 @@ class XPublisher extends BasePublisher
 
             $mediaIds = [];
             foreach ($mediaAssets->take(4) as $asset) {
-                $mediaId = $this->uploadMedia($token, $asset);
+                $mediaId = $this->uploadMedia($account, $asset);
                 if ($mediaId) $mediaIds[] = $mediaId;
             }
 
@@ -78,16 +52,19 @@ class XPublisher extends BasePublisher
                 $body['media'] = ['media_ids' => $mediaIds];
             }
 
-            $res = Http::withToken($token)
-                ->post(self::API . '/tweets', $body)
+            $url     = self::API . '/tweets';
+            $headers = $this->oauth1Header('POST', $url, $account);
+
+            $res = Http::withHeaders($headers)
+                ->post($url, $body)
                 ->throw()
                 ->json();
 
             $tweetId = $res['data']['id'];
             $handle  = ltrim($account->account_handle ?? '', '@');
-            $url     = "https://x.com/{$handle}/status/{$tweetId}";
+            $postUrl = "https://x.com/{$handle}/status/{$tweetId}";
 
-            return $this->buildSuccessResponse($tweetId, $url);
+            return $this->buildSuccessResponse($tweetId, $postUrl);
 
         } catch (\Illuminate\Http\Client\RequestException $e) {
             $body    = $e->response->json();
@@ -96,7 +73,6 @@ class XPublisher extends BasePublisher
 
             Log::error('X publish failed', ['error' => $body]);
 
-            // 429 = rate limit, retryable
             $retryable = ($e->response->status() === 429);
 
             return $this->buildErrorResponse("X: {$message}", $retryable, $code);
@@ -107,50 +83,49 @@ class XPublisher extends BasePublisher
         }
     }
 
-    private function uploadMedia(string $token, $asset): ?string
+    private function uploadMedia(SocialAccount $account, $asset): ?string
     {
         try {
             $url      = $this->assetUrl($asset);
             $mimeType = $asset->mime_type ?? 'image/jpeg';
             $isVideo  = str_starts_with($mimeType, 'video/');
 
-            // Download the file content
             $fileContent = Http::get($url)->throw()->body();
-
-            $category = $isVideo ? 'tweet_video' : 'tweet_image';
+            $category    = $isVideo ? 'tweet_video' : 'tweet_image';
+            $uploadUrl   = self::UPLOAD_API . '/media/upload.json';
 
             // INIT
-            $initRes = Http::withToken($token)
+            $initParams = [
+                'command'        => 'INIT',
+                'total_bytes'    => strlen($fileContent),
+                'media_type'     => $mimeType,
+                'media_category' => $category,
+            ];
+            $initRes = Http::withHeaders($this->oauth1Header('POST', $uploadUrl, $account, $initParams))
                 ->asForm()
-                ->post(self::UPLOAD_API . '/media/upload.json', [
-                    'command'        => 'INIT',
-                    'total_bytes'    => strlen($fileContent),
-                    'media_type'     => $mimeType,
-                    'media_category' => $category,
-                ])->throw()->json();
+                ->post($uploadUrl, $initParams)
+                ->throw()
+                ->json();
 
             $mediaId = $initRes['media_id_string'];
 
             // APPEND
-            Http::withToken($token)
-                ->attach('media', $fileContent, 'media')
-                ->post(self::UPLOAD_API . '/media/upload.json', [
-                    'command'       => 'APPEND',
-                    'media_id'      => $mediaId,
-                    'segment_index' => 0,
-                ])->throw();
+            $appendParams = ['command' => 'APPEND', 'media_id' => $mediaId, 'segment_index' => 0];
+            Http::withHeaders($this->oauth1Header('POST', $uploadUrl, $account, $appendParams))
+                ->attach('media', $fileContent, 'upload')
+                ->post($uploadUrl, $appendParams)
+                ->throw();
 
             // FINALIZE
-            $finalRes = Http::withToken($token)
+            $finalParams = ['command' => 'FINALIZE', 'media_id' => $mediaId];
+            $finalRes = Http::withHeaders($this->oauth1Header('POST', $uploadUrl, $account, $finalParams))
                 ->asForm()
-                ->post(self::UPLOAD_API . '/media/upload.json', [
-                    'command'  => 'FINALIZE',
-                    'media_id' => $mediaId,
-                ])->throw()->json();
+                ->post($uploadUrl, $finalParams)
+                ->throw()
+                ->json();
 
-            // Wait for video processing
             if ($isVideo) {
-                $this->waitForMediaProcessing($token, $mediaId);
+                $this->waitForMediaProcessing($account, $mediaId);
             }
 
             return $mediaId;
@@ -161,14 +136,17 @@ class XPublisher extends BasePublisher
         }
     }
 
-    private function waitForMediaProcessing(string $token, string $mediaId, int $maxAttempts = 10): void
+    private function waitForMediaProcessing(SocialAccount $account, string $mediaId, int $maxAttempts = 10): void
     {
+        $url = self::UPLOAD_API . '/media/upload.json';
+
         for ($i = 0; $i < $maxAttempts; $i++) {
-            $res    = Http::withToken($token)
-                ->get(self::UPLOAD_API . '/media/upload.json', ['command' => 'STATUS', 'media_id' => $mediaId])
+            $params = ['command' => 'STATUS', 'media_id' => $mediaId];
+            $res    = Http::withHeaders($this->oauth1Header('GET', $url, $account, $params))
+                ->get($url, $params)
                 ->json();
 
-            $state  = $res['processing_info']['state'] ?? 'succeeded';
+            $state = $res['processing_info']['state'] ?? 'succeeded';
 
             if ($state === 'succeeded') return;
             if ($state === 'failed') throw new \RuntimeException('X media processing failed.');
@@ -177,6 +155,52 @@ class XPublisher extends BasePublisher
         }
 
         throw new \RuntimeException('X media processing timed out.');
+    }
+
+    // -------------------------------------------------------------------------
+    // OAuth 1.0a signing
+    // -------------------------------------------------------------------------
+
+    private function oauth1Header(string $method, string $url, SocialAccount $account, array $extraParams = []): array
+    {
+        $consumerKey    = $this->credentials['api_key'];
+        $consumerSecret = $this->credentials['api_secret'];
+        $accessToken    = $account->access_token;
+        $tokenSecret    = $account->refresh_token ?? '';
+
+        $oauthParams = [
+            'oauth_consumer_key'     => $consumerKey,
+            'oauth_nonce'            => bin2hex(random_bytes(16)),
+            'oauth_signature_method' => 'HMAC-SHA1',
+            'oauth_timestamp'        => (string) time(),
+            'oauth_token'            => $accessToken,
+            'oauth_version'          => '1.0',
+        ];
+
+        // Merge all params for signature base string
+        $allParams = array_merge($oauthParams, $extraParams);
+        ksort($allParams);
+
+        $paramString = implode('&', array_map(
+            fn($k, $v) => rawurlencode($k) . '=' . rawurlencode($v),
+            array_keys($allParams),
+            array_values($allParams)
+        ));
+
+        $baseString = strtoupper($method) . '&' . rawurlencode($url) . '&' . rawurlencode($paramString);
+        $signingKey = rawurlencode($consumerSecret) . '&' . rawurlencode($tokenSecret);
+        $signature  = base64_encode(hash_hmac('sha1', $baseString, $signingKey, true));
+
+        $oauthParams['oauth_signature'] = $signature;
+        ksort($oauthParams);
+
+        $authHeader = 'OAuth ' . implode(', ', array_map(
+            fn($k, $v) => rawurlencode($k) . '="' . rawurlencode($v) . '"',
+            array_keys($oauthParams),
+            array_values($oauthParams)
+        ));
+
+        return ['Authorization' => $authHeader];
     }
 
     private function assetUrl($asset): string
@@ -188,25 +212,27 @@ class XPublisher extends BasePublisher
 
     public function getPostStatus(string $externalPostId, SocialAccount $account): array
     {
-        $res = Http::withToken($account->access_token)
-            ->get(self::API . "/tweets/{$externalPostId}", [
-                'tweet.fields' => 'created_at,text',
-            ])->json();
+        $url    = self::API . "/tweets/{$externalPostId}";
+        $params = ['tweet.fields' => 'created_at,text'];
+
+        $res = Http::withHeaders($this->oauth1Header('GET', $url, $account, $params))
+            ->get($url, $params)
+            ->json();
 
         return [
             'status' => isset($res['data']['id']) ? 'published' : 'unknown',
-            'url'    => isset($res['data']['id'])
-                ? 'https://x.com/i/status/' . $externalPostId
-                : null,
+            'url'    => isset($res['data']['id']) ? 'https://x.com/i/status/' . $externalPostId : null,
         ];
     }
 
     public function getAnalytics(string $externalPostId, SocialAccount $account): array
     {
-        $res = Http::withToken($account->access_token)
-            ->get(self::API . "/tweets/{$externalPostId}", [
-                'tweet.fields' => 'public_metrics',
-            ])->json();
+        $url    = self::API . "/tweets/{$externalPostId}";
+        $params = ['tweet.fields' => 'public_metrics'];
+
+        $res = Http::withHeaders($this->oauth1Header('GET', $url, $account, $params))
+            ->get($url, $params)
+            ->json();
 
         $metrics = $res['data']['public_metrics'] ?? [];
 

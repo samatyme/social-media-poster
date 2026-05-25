@@ -124,9 +124,22 @@
             </div>
             <div>
               <label class="label">Access Token</label>
-              <textarea v-model="connectForm.access_token" class="input font-mono text-xs" rows="3" placeholder="Paste your Page Access Token from Graph API Explorer" />
+              <textarea v-model="connectForm.access_token" class="input font-mono text-xs" rows="3" :placeholder="connectForm.platform === 'x' ? 'OAuth 1.0a Access Token' : 'Paste your Page Access Token'" />
             </div>
-            <div class="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-xs text-amber-700 space-y-1">
+            <div v-if="connectForm.platform === 'x'">
+              <label class="label">Access Token Secret</label>
+              <textarea v-model="connectForm.access_token_secret" class="input font-mono text-xs" rows="2" placeholder="OAuth 1.0a Access Token Secret" />
+            </div>
+            <div v-if="connectForm.platform === 'x'" class="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-xs text-amber-700 space-y-1">
+              <p class="font-semibold">How to get X credentials:</p>
+              <ol class="list-decimal ml-4 space-y-0.5">
+                <li>Go to <strong>developer.twitter.com</strong> → your app → <strong>Keys & Tokens</strong></li>
+                <li>Under <strong>OAuth 1.0a Keys</strong> → click <strong>Generate</strong> next to Access Token</li>
+                <li>Copy the <strong>Access Token</strong> and <strong>Access Token Secret</strong></li>
+                <li>For Account ID, go to <strong>tweeterid.com</strong> and enter your @username</li>
+              </ol>
+            </div>
+            <div v-else class="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-xs text-amber-700 space-y-1">
               <p class="font-semibold">How to get a Page Access Token:</p>
               <ol class="list-decimal ml-4 space-y-0.5">
                 <li>Go to <strong>developers.facebook.com/tools/explorer</strong></li>
@@ -167,7 +180,7 @@ const accounts          = ref([])
 const showConnectModal  = ref(false)
 const connecting        = ref(false)
 const connectMethod     = ref('oauth')
-const connectForm       = ref({ platform: '', account_name: '', account_handle: '', external_id: '', access_token: '' })
+const connectForm       = ref({ platform: '', account_name: '', account_handle: '', external_id: '', access_token: '', access_token_secret: '' })
 
 const canConnect = computed(() => {
   if (!connectForm.value.platform) return false
@@ -219,7 +232,7 @@ async function connectAccount() {
 
     toast.success('Account connected!')
     showConnectModal.value = false
-    connectForm.value = { platform: '', account_name: '', account_handle: '', external_id: '', access_token: '' }
+    connectForm.value = { platform: '', account_name: '', account_handle: '', external_id: '', access_token: '', access_token_secret: '' }
     connectMethod.value = 'oauth'
     await fetchAccounts()
   } catch (err) {
