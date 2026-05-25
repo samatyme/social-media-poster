@@ -236,8 +236,12 @@ class OAuthController extends \App\Http\Controllers\Controller
         $verifier  = $this->generateCodeVerifier();
         $challenge = $this->generateCodeChallenge($verifier);
 
-        // Store verifier in cache keyed by state for retrieval in callback
-        \Illuminate\Support\Facades\Cache::put('x_pkce_' . md5($state), $verifier, now()->addMinutes(10));
+        // Embed verifier inside encrypted state so no cache/session needed
+        $state = Crypt::encryptString(json_encode([
+            'org_id'   => json_decode(Crypt::decryptString($state), true)['org_id'],
+            'platform' => 'x',
+            'verifier' => $verifier,
+        ]));
 
         return 'https://twitter.com/i/oauth2/authorize?' . http_build_query([
             'response_type'         => 'code',
@@ -262,8 +266,7 @@ class OAuthController extends \App\Http\Controllers\Controller
 
     private function handleXCallback(Request $request, int $orgId, array $creds): SocialAccount
     {
-        $state    = $request->query('state', '');
-        $verifier = \Illuminate\Support\Facades\Cache::pull('x_pkce_' . md5($state)) ?? '';
+        $verifier = $state['verifier'] ?? '';
 
         $tokenRes = Http::withBasicAuth($creds['api_key'], $creds['api_secret'])
             ->asForm()
