@@ -233,26 +233,45 @@ class OAuthController extends \App\Http\Controllers\Controller
 
     private function xAuthUrl(array $creds, string $state): string
     {
+        $verifier  = $this->generateCodeVerifier();
+        $challenge = $this->generateCodeChallenge($verifier);
+
+        // Store verifier in cache keyed by state for retrieval in callback
+        \Illuminate\Support\Facades\Cache::put('x_pkce_' . md5($state), $verifier, now()->addMinutes(10));
+
         return 'https://twitter.com/i/oauth2/authorize?' . http_build_query([
             'response_type'         => 'code',
             'client_id'             => $creds['api_key'],
             'redirect_uri'          => $this->callbackUrl('x'),
             'scope'                 => 'tweet.read tweet.write users.read offline.access',
             'state'                 => $state,
-            'code_challenge'        => 'challenge',
-            'code_challenge_method' => 'plain',
+            'code_challenge'        => $challenge,
+            'code_challenge_method' => 'S256',
         ]);
+    }
+
+    private function generateCodeVerifier(): string
+    {
+        return rtrim(strtr(base64_encode(random_bytes(32)), '+/', '-_'), '=');
+    }
+
+    private function generateCodeChallenge(string $verifier): string
+    {
+        return rtrim(strtr(base64_encode(hash('sha256', $verifier, true)), '+/', '-_'), '=');
     }
 
     private function handleXCallback(Request $request, int $orgId, array $creds): SocialAccount
     {
+        $state    = $request->query('state', '');
+        $verifier = \Illuminate\Support\Facades\Cache::pull('x_pkce_' . md5($state)) ?? '';
+
         $tokenRes = Http::withBasicAuth($creds['api_key'], $creds['api_secret'])
             ->asForm()
             ->post('https://api.twitter.com/2/oauth2/token', [
                 'code'          => $request->query('code'),
                 'grant_type'    => 'authorization_code',
                 'redirect_uri'  => $this->callbackUrl('x'),
-                'code_verifier' => 'challenge',
+                'code_verifier' => $verifier,
             ])->throw()->json();
 
         $userRes = Http::withToken($tokenRes['access_token'])
